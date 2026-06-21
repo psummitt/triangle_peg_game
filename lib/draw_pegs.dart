@@ -31,8 +31,18 @@ class DrawPegs extends StatelessWidget {
                   onDragEnd: (details) {
                     if (!details.wasAccepted) {
                       showSnackBarGlobal(context, 'The destination must be an empty hole!');
-                      Future.delayed(const Duration(seconds: 2)).then((_) => showSnackBarGlobal(
-                          context, 'Drag a peg over another and into an empty hole.'));
+                      final messenger = ScaffoldMessenger.of(context);
+                      Future.delayed(const Duration(seconds: 2)).then((_) {
+                        if (context.mounted) {
+                          messenger.removeCurrentSnackBar();
+                          messenger.showSnackBar(const SnackBar(
+                              duration: Duration(days: 1),
+                              content: Text(
+                                'Drag a peg over another and into an empty hole.',
+                                textScaler: TextScaler.linear(2),
+                              )));
+                        }
+                      });
                     }
                   },
                   feedback: Material(

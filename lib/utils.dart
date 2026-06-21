@@ -12,6 +12,6 @@ void showSnackBarGlobal(BuildContext context, String message) {
       duration: const Duration(days: 1),
       content: Text(
         message,
-        textScaleFactor: 2,
+        textScaler: const TextScaler.linear(2),
       )));
 }

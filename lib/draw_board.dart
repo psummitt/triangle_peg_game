@@ -46,14 +46,14 @@ class DrawBoard extends StatelessWidget {
           isOutsideBoard = true;
         }
       },
-      onWillAccept: (data) {
-        // log.d('board.onWillAccept with peg $data');
+      onWillAcceptWithDetails: (details) {
+        // log.d('board.onWillAccept with peg ${details.data}');
         return pegs.length == pegCount;
       },
-      onAccept: (data) {
-        log.d('Board: onAccept with isOutsideBoard = $isOutsideBoard and peg $data}');
+      onAcceptWithDetails: (details) {
+        log.d('Board: onAccept with isOutsideBoard = $isOutsideBoard and peg ${details.data}}');
         if (isOutsideBoard) {
-          onJumpRequested(data, 0);
+          onJumpRequested(details.data, 0);
         }
       },
     );

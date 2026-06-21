@@ -56,7 +56,8 @@ const List<JumpRec> allValidJumps = [
 final Map<int, ({double x, double y})> pegPositions = {};
 
 class PegGame extends StatefulWidget {
-  const PegGame({super.key});
+  final Function(List<JumpRec>)? onHistoryChanged;
+  const PegGame({super.key, this.onHistoryChanged});
 
   @override
   State<PegGame> createState() => _PegGame();
@@ -69,7 +70,7 @@ class _PegGame extends State<PegGame> {
   // The following 2 structures should probably be combined,
   //   perhaps as a list of Pair<int, Color> (dartx package) or (peg, color) record,
   //   or maybe as a LinkedHashMap (which is ordered).
-  List jumpsMade = [];
+  List<JumpRec> jumpsMade = [];
   List jumpedColors = [];
   int bestScore = pegCount;
   String resultMsg = '';
@@ -82,8 +83,9 @@ class _PegGame extends State<PegGame> {
       ..addListener(() => setState(() {}));
 
     // Build a list of row where each row contains the peg numbers in that row:
+    int currentPeg = 0;
     final grid = [
-      for (var (peg, row) = (0, 1); row <= rows; row++) [for (var col = 1; col <= row; col++) ++peg]
+      for (int row = 1; row <= rows; row++) [for (int col = 1; col <= row; col++) ++currentPeg]
     ];
 
     // Build a map, keyed by peg number, with the fractional offsets (x,y) for that peg:
@@ -103,20 +105,27 @@ class _PegGame extends State<PegGame> {
     noMoreJumps = false;
     getBestScore();
     pegs.clear();
+    jumpsMade.clear();
+    jumpedColors.clear();
     for (int peg = 1; peg <= pegCount; peg++) {
-      pegs[peg] = Color(colors[Random().nextInt(colors.length)].value);
+      pegs[peg] = colors[Random().nextInt(colors.length)];
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        showSnackBarGlobal(context, 'Drag the first peg off of the board.');
+        widget.onHistoryChanged?.call(List.unmodifiable(jumpsMade));
+      }
+    });
 
     setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) => () {
-          if (pegs.length == pegCount) {
-            showSnackBarGlobal(context, 'Drag the first peg off of the board.');
-          }
-        }());
+    if (pegPositions.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return LayoutBuilder(builder: (context, constraints) {
       var width = min(constraints.maxWidth, constraints.maxHeight);
       var height = sqrt(3) / 2 * width; // formula for the height of an equilateral triangle
@@ -134,7 +143,7 @@ class _PegGame extends State<PegGame> {
             if (noMoreJumps)
               AlertDialog(
                 title: const Text('Game Over'),
-                content: Text("You left ${pegs.length} peg(s).\n\nThat's $resultMsg}\n"),
+                content: Text("You left ${pegs.length} peg(s).\n\nThat's $resultMsg\n"),
                 actions: <Widget>[
                   TextButton(
                     onPressed: () => resetGame(),
@@ -182,19 +191,19 @@ class _PegGame extends State<PegGame> {
             )
           ]);
         },
-        onWillAccept: (data) {
+        onWillAcceptWithDetails: (details) {
           // log.d('peg_game.onWillAccept() pegs.length = ${pegs.length}');
           return pegs.length == pegCount;
         },
-        onAccept: (data) {
+        onAcceptWithDetails: (details) {
           // Always except drop of first peg (since drag-target will always be outside of board):
-          onJumpRequested(data, 0);
+          onJumpRequested(details.data, 0);
         },
       );
     });
   }
 
-  onJumpRequested(int from, int to) {
+  void onJumpRequested(int from, int to) {
     log.d('Jump from $from to $to requested.');
 
     JumpRec? jump = getJump(from, to);
@@ -218,13 +227,33 @@ class _PegGame extends State<PegGame> {
     //   check that there is a valid jump with those and that the 'over' hole has a peg in it.
     if (!allValidJumps.contains(jump)) {
       showSnackBarGlobal(context, 'That is an invalid jump!');
-      Future.delayed(const Duration(seconds: 2)).then(
-          (_) => showSnackBarGlobal(context, 'Drag a peg over another and into an empty hole.'));
+      final messenger = ScaffoldMessenger.of(context);
+      Future.delayed(const Duration(seconds: 2)).then((_) {
+        if (mounted) {
+          messenger.removeCurrentSnackBar();
+          messenger.showSnackBar(const SnackBar(
+              duration: Duration(days: 1),
+              content: Text(
+                'Drag a peg over another and into an empty hole.',
+                textScaler: TextScaler.linear(2),
+              )));
+        }
+      });
       return false;
     } else if (pegs[jump.over] == null) {
       showSnackBarGlobal(context, 'A peg must be jumped over!');
-      Future.delayed(const Duration(seconds: 2)).then(
-          (_) => showSnackBarGlobal(context, 'Drag a peg over another and into an empty hole.'));
+      final messenger = ScaffoldMessenger.of(context);
+      Future.delayed(const Duration(seconds: 2)).then((_) {
+        if (mounted) {
+          messenger.removeCurrentSnackBar();
+          messenger.showSnackBar(const SnackBar(
+              duration: Duration(days: 1),
+              content: Text(
+                'Drag a peg over another and into an empty hole.',
+                textScaler: TextScaler.linear(2),
+              )));
+        }
+      });
       return false;
     }
     return true;
@@ -262,7 +291,7 @@ class _PegGame extends State<PegGame> {
       showSnackBarGlobal(context, 'Drag a peg over another and into an empty hole.');
     }
 
-    // Let the GUI know that the state's changed so that it will update itself:
+    widget.onHistoryChanged?.call(List.unmodifiable(jumpsMade));
     setState(() {});
   }
 
@@ -285,6 +314,7 @@ class _PegGame extends State<PegGame> {
     }
     log.d('pegs=$pegs');
 
+    widget.onHistoryChanged?.call(List.unmodifiable(jumpsMade));
     setState(() {});
   }
 
@@ -306,16 +336,26 @@ class _PegGame extends State<PegGame> {
   }
 
   Future<void> setBestScore(pegsRemaining) async {
-    final SharedPreferences pref = await SharedPreferences.getInstance();
-    if (pegsRemaining < bestScore) {
-      await pref.setInt('scoreData', pegsRemaining);
-      setState(() {});
+    try {
+      final SharedPreferences pref = await SharedPreferences.getInstance();
+      if (pegsRemaining < bestScore) {
+        await pref.setInt('scoreData', pegsRemaining);
+        setState(() {});
+      }
+    } catch (e) {
+      log.e('Error setting best score: $e');
     }
   }
 
   void getBestScore() async {
-    final SharedPreferences pref = await SharedPreferences.getInstance();
-    bestScore = pref.getInt('scoreData')!;
-    setState(() {});
+    try {
+      final SharedPreferences pref = await SharedPreferences.getInstance();
+      bestScore = pref.getInt('scoreData') ?? pegCount;
+      setState(() {});
+    } catch (e) {
+      log.e('Error getting best score: $e');
+      bestScore = pegCount;
+      setState(() {});
+    }
   }
 }
